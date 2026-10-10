@@ -1,0 +1,71 @@
+Query: available_copies
+Server version: 16.15
+Index this query can use: book_copies_available_book_idx matches available copies of one title.
+
+These plans were captured on one PostgreSQL server after the laboratory seed was analyzed.
+Estimated costs and actual times belong to that run and to a few dozen rows.
+A sequential scan is a rational plan when the heap is one or two pages.
+The secondary indexes are justified by the predicates, join keys, and foreign-key checks
+the schema will run as those tables grow. They are not justified by a claim that this
+seed got faster. The section that disables sequential scans shows a plan shape the
+planner can produce. It is not a benchmark.
+
+SQL:
+SELECT copy_id, barcode
+        FROM book_copies
+        WHERE book_id = 1
+          AND copy_status = 'available'
+        ORDER BY copy_id
+
+== Before secondary indexes (EXPLAIN) ==
+Sort  (cost=1.22..1.22 rows=2 width=19)
+  Sort Key: copy_id
+  ->  Seq Scan on book_copies  (cost=0.00..1.21 rows=2 width=19)
+        Filter: ((book_id = 1) AND (copy_status = 'available'::text))
+
+== Before secondary indexes (EXPLAIN ANALYZE) ==
+Sort  (cost=1.22..1.22 rows=2 width=19) (actual time=0.007..0.007 rows=2 loops=1)
+  Sort Key: copy_id
+  Sort Method: quicksort  Memory: 25kB
+  Buffers: shared hit=4
+  ->  Seq Scan on book_copies  (cost=0.00..1.21 rows=2 width=19) (actual time=0.002..0.003 rows=2 loops=1)
+        Filter: ((book_id = 1) AND (copy_status = 'available'::text))
+        Rows Removed by Filter: 12
+        Buffers: shared hit=1
+Planning Time: 0.007 ms
+Execution Time: 0.008 ms
+
+== After secondary indexes (EXPLAIN) ==
+Sort  (cost=1.22..1.22 rows=2 width=19)
+  Sort Key: copy_id
+  ->  Seq Scan on book_copies  (cost=0.00..1.21 rows=2 width=19)
+        Filter: ((book_id = 1) AND (copy_status = 'available'::text))
+
+== After secondary indexes (EXPLAIN ANALYZE) ==
+Sort  (cost=1.22..1.22 rows=2 width=19) (actual time=0.002..0.003 rows=2 loops=1)
+  Sort Key: copy_id
+  Sort Method: quicksort  Memory: 25kB
+  Buffers: shared hit=1
+  ->  Seq Scan on book_copies  (cost=0.00..1.21 rows=2 width=19) (actual time=0.001..0.002 rows=2 loops=1)
+        Filter: ((book_id = 1) AND (copy_status = 'available'::text))
+        Rows Removed by Filter: 12
+        Buffers: shared hit=1
+Planning Time: 0.010 ms
+Execution Time: 0.004 ms
+
+== After secondary indexes, sequential scans disabled (EXPLAIN) ==
+Sort  (cost=8.18..8.18 rows=2 width=19)
+  Sort Key: copy_id
+  ->  Index Scan using book_copies_available_book_idx on book_copies  (cost=0.13..8.17 rows=2 width=19)
+        Index Cond: (book_id = 1)
+
+== After secondary indexes, sequential scans disabled (EXPLAIN ANALYZE) ==
+Sort  (cost=8.18..8.18 rows=2 width=19) (actual time=0.002..0.002 rows=2 loops=1)
+  Sort Key: copy_id
+  Sort Method: quicksort  Memory: 25kB
+  Buffers: shared hit=2
+  ->  Index Scan using book_copies_available_book_idx on book_copies  (cost=0.13..8.17 rows=2 width=19) (actual time=0.001..0.002 rows=2 loops=1)
+        Index Cond: (book_id = 1)
+        Buffers: shared hit=2
+Planning Time: 0.010 ms
+Execution Time: 0.004 ms

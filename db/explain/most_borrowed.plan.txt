@@ -1,0 +1,128 @@
+Query: most_borrowed
+Server version: 16.15
+Index this query can use: loans_copy_id_idx and book_copies_book_id_idx can serve the join from loans to titles.
+
+These plans were captured on one PostgreSQL server after the laboratory seed was analyzed.
+Estimated costs and actual times belong to that run and to a few dozen rows.
+A sequential scan is a rational plan when the heap is one or two pages.
+The secondary indexes are justified by the predicates, join keys, and foreign-key checks
+the schema will run as those tables grow. They are not justified by a claim that this
+seed got faster. The section that disables sequential scans shows a plan shape the
+planner can produce. It is not a benchmark.
+
+SQL:
+SELECT c.book_id, count(*) AS times_borrowed
+        FROM loans AS l
+        JOIN book_copies AS c ON c.copy_id = l.copy_id
+        GROUP BY c.book_id
+        ORDER BY times_borrowed DESC, c.book_id
+
+== Before secondary indexes (EXPLAIN) ==
+Sort  (cost=2.79..2.81 rows=9 width=16)
+  Sort Key: (count(*)) DESC, c.book_id
+  ->  HashAggregate  (cost=2.56..2.65 rows=9 width=16)
+        Group Key: c.book_id
+        ->  Hash Join  (cost=1.32..2.49 rows=13 width=8)
+              Hash Cond: (l.copy_id = c.copy_id)
+              ->  Seq Scan on loans l  (cost=0.00..1.13 rows=13 width=8)
+              ->  Hash  (cost=1.14..1.14 rows=14 width=16)
+                    ->  Seq Scan on book_copies c  (cost=0.00..1.14 rows=14 width=16)
+
+== Before secondary indexes (EXPLAIN ANALYZE) ==
+Sort  (cost=2.79..2.81 rows=9 width=16) (actual time=0.020..0.020 rows=5 loops=1)
+  Sort Key: (count(*)) DESC, c.book_id
+  Sort Method: quicksort  Memory: 25kB
+  Buffers: shared hit=2
+  ->  HashAggregate  (cost=2.56..2.65 rows=9 width=16) (actual time=0.017..0.018 rows=5 loops=1)
+        Group Key: c.book_id
+        Batches: 1  Memory Usage: 24kB
+        Buffers: shared hit=2
+        ->  Hash Join  (cost=1.32..2.49 rows=13 width=8) (actual time=0.010..0.013 rows=13 loops=1)
+              Hash Cond: (l.copy_id = c.copy_id)
+              Buffers: shared hit=2
+              ->  Seq Scan on loans l  (cost=0.00..1.13 rows=13 width=8) (actual time=0.001..0.002 rows=13 loops=1)
+                    Buffers: shared hit=1
+              ->  Hash  (cost=1.14..1.14 rows=14 width=16) (actual time=0.004..0.004 rows=14 loops=1)
+                    Buckets: 1024  Batches: 1  Memory Usage: 9kB
+                    Buffers: shared hit=1
+                    ->  Seq Scan on book_copies c  (cost=0.00..1.14 rows=14 width=16) (actual time=0.001..0.002 rows=14 loops=1)
+                          Buffers: shared hit=1
+Planning:
+  Buffers: shared hit=4
+Planning Time: 0.034 ms
+Execution Time: 0.029 ms
+
+== After secondary indexes (EXPLAIN) ==
+Sort  (cost=2.79..2.81 rows=9 width=16)
+  Sort Key: (count(*)) DESC, c.book_id
+  ->  HashAggregate  (cost=2.56..2.65 rows=9 width=16)
+        Group Key: c.book_id
+        ->  Hash Join  (cost=1.32..2.49 rows=13 width=8)
+              Hash Cond: (l.copy_id = c.copy_id)
+              ->  Seq Scan on loans l  (cost=0.00..1.13 rows=13 width=8)
+              ->  Hash  (cost=1.14..1.14 rows=14 width=16)
+                    ->  Seq Scan on book_copies c  (cost=0.00..1.14 rows=14 width=16)
+
+== After secondary indexes (EXPLAIN ANALYZE) ==
+Sort  (cost=2.79..2.81 rows=9 width=16) (actual time=0.018..0.019 rows=5 loops=1)
+  Sort Key: (count(*)) DESC, c.book_id
+  Sort Method: quicksort  Memory: 25kB
+  Buffers: shared hit=2
+  ->  HashAggregate  (cost=2.56..2.65 rows=9 width=16) (actual time=0.016..0.017 rows=5 loops=1)
+        Group Key: c.book_id
+        Batches: 1  Memory Usage: 24kB
+        Buffers: shared hit=2
+        ->  Hash Join  (cost=1.32..2.49 rows=13 width=8) (actual time=0.012..0.014 rows=13 loops=1)
+              Hash Cond: (l.copy_id = c.copy_id)
+              Buffers: shared hit=2
+              ->  Seq Scan on loans l  (cost=0.00..1.13 rows=13 width=8) (actual time=0.001..0.002 rows=13 loops=1)
+                    Buffers: shared hit=1
+              ->  Hash  (cost=1.14..1.14 rows=14 width=16) (actual time=0.007..0.008 rows=14 loops=1)
+                    Buckets: 1024  Batches: 1  Memory Usage: 9kB
+                    Buffers: shared hit=1
+                    ->  Seq Scan on book_copies c  (cost=0.00..1.14 rows=14 width=16) (actual time=0.001..0.002 rows=14 loops=1)
+                          Buffers: shared hit=1
+Planning:
+  Buffers: shared hit=8
+Planning Time: 0.035 ms
+Execution Time: 0.033 ms
+
+== After secondary indexes, sequential scans disabled (EXPLAIN) ==
+Sort  (cost=22.38..22.40 rows=9 width=16)
+  Sort Key: (count(*)) DESC, c.book_id
+  ->  HashAggregate  (cost=22.15..22.24 rows=9 width=16)
+        Group Key: c.book_id
+        ->  Nested Loop  (cost=0.28..22.08 rows=13 width=8)
+              ->  Index Only Scan using loans_copy_id_idx on loans l  (cost=0.14..12.33 rows=13 width=8)
+              ->  Memoize  (cost=0.15..1.09 rows=1 width=16)
+                    Cache Key: l.copy_id
+                    Cache Mode: logical
+                    ->  Index Scan using book_copies_pkey on book_copies c  (cost=0.14..1.08 rows=1 width=16)
+                          Index Cond: (copy_id = l.copy_id)
+
+== After secondary indexes, sequential scans disabled (EXPLAIN ANALYZE) ==
+Sort  (cost=22.38..22.40 rows=9 width=16) (actual time=0.021..0.022 rows=5 loops=1)
+  Sort Key: (count(*)) DESC, c.book_id
+  Sort Method: quicksort  Memory: 25kB
+  Buffers: shared hit=20
+  ->  HashAggregate  (cost=22.15..22.24 rows=9 width=16) (actual time=0.019..0.020 rows=5 loops=1)
+        Group Key: c.book_id
+        Batches: 1  Memory Usage: 24kB
+        Buffers: shared hit=20
+        ->  Nested Loop  (cost=0.28..22.08 rows=13 width=8) (actual time=0.008..0.017 rows=13 loops=1)
+              Buffers: shared hit=20
+              ->  Index Only Scan using loans_copy_id_idx on loans l  (cost=0.14..12.33 rows=13 width=8) (actual time=0.003..0.004 rows=13 loops=1)
+                    Heap Fetches: 13
+                    Buffers: shared hit=2
+              ->  Memoize  (cost=0.15..1.09 rows=1 width=16) (actual time=0.001..0.001 rows=1 loops=13)
+                    Cache Key: l.copy_id
+                    Cache Mode: logical
+                    Hits: 4  Misses: 9  Evictions: 0  Overflows: 0  Memory Usage: 2kB
+                    Buffers: shared hit=18
+                    ->  Index Scan using book_copies_pkey on book_copies c  (cost=0.14..1.08 rows=1 width=16) (actual time=0.001..0.001 rows=1 loops=9)
+                          Index Cond: (copy_id = l.copy_id)
+                          Buffers: shared hit=18
+Planning:
+  Buffers: shared hit=8
+Planning Time: 0.031 ms
+Execution Time: 0.029 ms
