@@ -1,0 +1,64 @@
+Query: member_history
+Server version: 16.15
+Index this query can use: loans_member_checkout_idx matches member_id plus checked_out_at order.
+
+These plans were captured on one PostgreSQL server after the laboratory seed was analyzed.
+Estimated costs and actual times belong to that run and to a few dozen rows.
+A sequential scan is a rational plan when the heap is one or two pages.
+The secondary indexes are justified by the predicates, join keys, and foreign-key checks
+the schema will run as those tables grow. They are not justified by a claim that this
+seed got faster. The section that disables sequential scans shows a plan shape the
+planner can produce. It is not a benchmark.
+
+SQL:
+SELECT loan_id, checked_out_at, due_at, returned_at
+        FROM loans
+        WHERE member_id = 1
+        ORDER BY checked_out_at DESC
+
+== Before secondary indexes (EXPLAIN) ==
+Sort  (cost=1.20..1.21 rows=4 width=32)
+  Sort Key: checked_out_at DESC
+  ->  Seq Scan on loans  (cost=0.00..1.16 rows=4 width=32)
+        Filter: (member_id = 1)
+
+== Before secondary indexes (EXPLAIN ANALYZE) ==
+Sort  (cost=1.20..1.21 rows=4 width=32) (actual time=0.005..0.006 rows=4 loops=1)
+  Sort Key: checked_out_at DESC
+  Sort Method: quicksort  Memory: 25kB
+  Buffers: shared hit=1
+  ->  Seq Scan on loans  (cost=0.00..1.16 rows=4 width=32) (actual time=0.002..0.003 rows=4 loops=1)
+        Filter: (member_id = 1)
+        Rows Removed by Filter: 9
+        Buffers: shared hit=1
+Planning Time: 0.005 ms
+Execution Time: 0.008 ms
+
+== After secondary indexes (EXPLAIN) ==
+Sort  (cost=1.20..1.21 rows=4 width=32)
+  Sort Key: checked_out_at DESC
+  ->  Seq Scan on loans  (cost=0.00..1.16 rows=4 width=32)
+        Filter: (member_id = 1)
+
+== After secondary indexes (EXPLAIN ANALYZE) ==
+Sort  (cost=1.20..1.21 rows=4 width=32) (actual time=0.003..0.003 rows=4 loops=1)
+  Sort Key: checked_out_at DESC
+  Sort Method: quicksort  Memory: 25kB
+  Buffers: shared hit=1
+  ->  Seq Scan on loans  (cost=0.00..1.16 rows=4 width=32) (actual time=0.001..0.002 rows=4 loops=1)
+        Filter: (member_id = 1)
+        Rows Removed by Filter: 9
+        Buffers: shared hit=1
+Planning Time: 0.007 ms
+Execution Time: 0.005 ms
+
+== After secondary indexes, sequential scans disabled (EXPLAIN) ==
+Index Scan using loans_member_checkout_idx on loans  (cost=0.14..8.21 rows=4 width=32)
+  Index Cond: (member_id = 1)
+
+== After secondary indexes, sequential scans disabled (EXPLAIN ANALYZE) ==
+Index Scan using loans_member_checkout_idx on loans  (cost=0.14..8.21 rows=4 width=32) (actual time=0.008..0.008 rows=4 loops=1)
+  Index Cond: (member_id = 1)
+  Buffers: shared hit=5
+Planning Time: 0.006 ms
+Execution Time: 0.010 ms
